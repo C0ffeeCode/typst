@@ -139,6 +139,13 @@ pub struct SharedArgs {
     )]
     pub inputs: Vec<(String, String)>,
 
+    /// Read input from stdin/pipe, visible through sys.inputs.piped
+    #[clap(
+        long = "pipe-input",
+        action = ArgAction::SetTrue,
+    )]
+    pub pipe_input: bool,
+
     /// Adds additional directories to search for fonts
     #[clap(
         long = "font-path",

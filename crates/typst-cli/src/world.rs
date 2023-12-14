@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{read_to_string, stdin, Read};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::{fmt, fs, io, mem};
@@ -93,16 +93,22 @@ impl SystemWorld {
             *STDIN_ID
         };
 
-        let library = {
-            // Convert the input pairs to a dictionary.
-            let inputs: Dict = command
-                .inputs
-                .iter()
-                .map(|(k, v)| (k.as_str().into(), v.as_str().into_value()))
-                .collect();
+        let mut inputs = command.inputs.to_owned();
+        // Read data from pipe if enstructed to do so.
+        if command.pipe_input {
+            let stdin = stdin();
+            let stdin = stdin.lock();
+            let piped_input = read_to_string(stdin).expect("failed to read form pipe");
+            inputs.push(("piped".to_owned(), piped_input.trim().to_string()));
+        }
 
-            Library::builder().with_inputs(inputs).build()
-        };
+        // Convert the Vec<(String, String)> to a Typst Dictionary.
+        let inputs: Dict = inputs
+            .iter()
+            .map(|(k, v)| (k.clone().into(), v.as_str().into_value()))
+            .collect();
+
+        let library = Library::builder().with_inputs(inputs).build();
 
         let mut searcher = FontSearcher::new();
         searcher.search(&command.font_paths);
