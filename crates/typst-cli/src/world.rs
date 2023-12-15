@@ -95,11 +95,13 @@ impl SystemWorld {
 
         let mut inputs = command.inputs.to_owned();
         // Read data from pipe if enstructed to do so.
-        if command.pipe_input {
-            let stdin = stdin();
-            let stdin = stdin.lock();
-            let piped_input = read_to_string(stdin).expect("failed to read form pipe");
-            inputs.push(("piped".to_owned(), piped_input.trim().to_string()));
+        match &command.pipe_input {
+            Some(key) => {
+                let piped_input =
+                    read_to_string(stdin().lock()).expect("failed to read form stdin");
+                inputs.push((key.to_owned(), piped_input.trim().to_string()));
+            }
+            None => {}
         }
 
         // Convert the Vec<(String, String)> to a Typst Dictionary.
