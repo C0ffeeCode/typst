@@ -126,12 +126,13 @@ pub struct SharedArgs {
     )]
     pub inputs: Vec<(String, String)>,
 
-    /// Read input from stdin/pipe, visible through sys.inputs.piped
+    /// Read input from stdin/pipe and make it available at the specified key.
     #[clap(
         long = "pipe-input",
-        action = ArgAction::SetTrue,
+        action = ArgAction::Set,
+        value_parser = ValueParser::new(parse_input_key),
     )]
-    pub pipe_input: bool,
+    pub pipe_input: Option<String>,
 
     /// Adds additional directories to search for fonts
     #[clap(
@@ -159,12 +160,25 @@ fn parse_input_pair(raw: &str) -> Result<(String, String), String> {
     let (key, val) = raw
         .split_once('=')
         .ok_or("input must be a key and a value separated by an equal sign")?;
-    let key = key.trim().to_owned();
-    if key.is_empty() {
-        return Err("the key was missing or empty".to_owned());
-    }
+    let key = match parse_input_key(key) {
+        Ok(k) => k,
+        Err(e) => return Err(e),
+    };
     let val = val.trim().to_owned();
     Ok((key, val))
+}
+
+/// Parses and validates a key for input
+///
+/// # Errors
+///
+/// This function will return an error if the key is blank
+fn parse_input_key(key: &str) -> Result<String, String> {
+    let trim = &key.trim();
+    if trim.is_empty() {
+        return Err("the key was missing or empty".to_owned());
+    }
+    Ok(trim.to_string())
 }
 
 /// Lists all discovered fonts in system and custom font paths
