@@ -12,6 +12,9 @@ use crate::util::PicoStr;
 /// A labelled element can be [referenced]($ref), [queried]($query) for, and
 /// [styled]($styling) through its label.
 ///
+/// Once constructed, you can get the name of a label using
+/// [`str`]($str/#constructor).
+///
 /// # Example
 /// ```example
 /// #show <a>: set text(blue)
@@ -23,7 +26,8 @@ use crate::util::PicoStr;
 ///
 /// # Syntax
 /// This function also has dedicated syntax: You can create a label by enclosing
-/// its name in angle brackets. This works both in markup and code.
+/// its name in angle brackets. This works both in markup and code. A label's
+/// name can contain letters, numbers, `_`, `-`, `:`, and `.`.
 ///
 /// Currently, labels can only be attached to elements in markup mode, not in
 /// code mode. This might change in the future.

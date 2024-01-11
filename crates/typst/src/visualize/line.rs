@@ -59,7 +59,7 @@ pub struct LineElem {
 }
 
 impl Layout for LineElem {
-    #[tracing::instrument(name = "LineElem::layout", skip_all)]
+    #[typst_macros::time(name = "line", span = self.span())]
     fn layout(
         &self,
         _: &mut Engine,
@@ -89,6 +89,7 @@ impl Layout for LineElem {
         let mut frame = Frame::soft(target);
         let shape = Geometry::Line(delta.to_point()).stroked(stroke);
         frame.push(start.to_point(), FrameItem::Shape(shape, self.span()));
+        frame.meta(styles, false);
         Ok(Fragment::frame(frame))
     }
 }

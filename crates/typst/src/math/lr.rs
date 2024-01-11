@@ -3,7 +3,9 @@ use unicode_math_class::MathClass;
 use crate::diag::SourceResult;
 use crate::foundations::{elem, func, Content, NativeElement, Resolve, Smart};
 use crate::layout::{Abs, Em, Length, Rel};
-use crate::math::{GlyphFragment, LayoutMath, MathContext, MathFragment, Scaled};
+use crate::math::{
+    GlyphFragment, LayoutMath, MathContext, MathFragment, Scaled, SpacingFragment,
+};
 use crate::text::TextElem;
 
 /// How much less high scaled delimiters can be than what they wrap.
@@ -34,7 +36,7 @@ pub struct LrElem {
 }
 
 impl LayoutMath for LrElem {
-    #[tracing::instrument(skip(ctx))]
+    #[typst_macros::time(name = "math.lr", span = self.span())]
     fn layout_math(&self, ctx: &mut MathContext) -> SourceResult<()> {
         let mut body = self.body();
         if let Some(elem) = body.to::<LrElem>() {
@@ -77,6 +79,19 @@ impl LayoutMath for LrElem {
             }
         }
 
+        // Remove weak SpacingFragment immediately after the opening or immediately
+        // before the closing.
+        let original_len = fragments.len();
+        let mut index = 0;
+        fragments.retain(|fragment| {
+            index += 1;
+            (index != 2 && index + 1 != original_len)
+                || !matches!(
+                    fragment,
+                    MathFragment::Spacing(SpacingFragment { weak: true, .. })
+                )
+        });
+
         ctx.extend(fragments);
 
         Ok(())
@@ -96,7 +111,7 @@ pub struct MidElem {
 }
 
 impl LayoutMath for MidElem {
-    #[tracing::instrument(skip(ctx))]
+    #[typst_macros::time(name = "math.mid", span = self.span())]
     fn layout_math(&self, ctx: &mut MathContext) -> SourceResult<()> {
         let mut fragments = ctx.layout_fragments(self.body())?;
 
@@ -235,11 +250,13 @@ fn delimited(
     right: char,
     size: Option<Smart<Rel<Length>>>,
 ) -> Content {
+    let span = body.span();
     let mut elem = LrElem::new(Content::sequence([
         TextElem::packed(left),
         body,
         TextElem::packed(right),
-    ]));
+    ]))
+    .spanned(span);
     // Push size only if size is provided
     if let Some(size) = size {
         elem.push_size(size);

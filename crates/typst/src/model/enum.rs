@@ -6,8 +6,8 @@ use crate::foundations::{
     cast, elem, scope, Array, Content, Fold, NativeElement, Smart, StyleChain,
 };
 use crate::layout::{
-    Align, Axes, BlockElem, Em, Fragment, GridLayouter, HAlign, Layout, Length, Regions,
-    Sizing, Spacing, VAlign,
+    Align, Axes, BlockElem, Cell, CellGrid, Em, Fragment, GridLayouter, HAlign, Layout,
+    Length, Regions, Sizing, Spacing, VAlign,
 };
 use crate::model::{Numbering, NumberingPattern, ParElem};
 use crate::text::TextElem;
@@ -163,7 +163,7 @@ pub struct EnumElem {
     /// The choice of `{end}` for horizontal alignment of enum numbers is
     /// usually preferred over `{start}`, as numbers then grow away from the
     /// text instead of towards it, avoiding certain visual issues. This option
-    /// lets you override this behavior, however. (Also to note is that the
+    /// lets you override this behaviour, however. (Also to note is that the
     /// [unordered list]($list) uses a different method for this, by giving the
     /// `marker` content an alignment directly.).
     ///
@@ -209,7 +209,7 @@ impl EnumElem {
 }
 
 impl Layout for EnumElem {
-    #[tracing::instrument(name = "EnumElem::layout", skip_all)]
+    #[typst_macros::time(name = "enum", span = self.span())]
     fn layout(
         &self,
         engine: &mut Engine,
@@ -259,14 +259,17 @@ impl Layout for EnumElem {
             let resolved =
                 resolved.aligned(number_align).styled(TextElem::set_overhang(false));
 
-            cells.push(Content::empty());
-            cells.push(resolved);
-            cells.push(Content::empty());
-            cells.push(item.body().clone().styled(Self::set_parents(Parent(number))));
+            cells.push(Cell::from(Content::empty()));
+            cells.push(Cell::from(resolved));
+            cells.push(Cell::from(Content::empty()));
+            cells.push(Cell::from(
+                item.body().clone().styled(Self::set_parents(Parent(number))),
+            ));
             number = number.saturating_add(1);
         }
 
-        let layouter = GridLayouter::new(
+        let stroke = None;
+        let grid = CellGrid::new(
             Axes::with_x(&[
                 Sizing::Rel(indent.into()),
                 Sizing::Auto,
@@ -274,13 +277,12 @@ impl Layout for EnumElem {
                 Sizing::Auto,
             ]),
             Axes::with_y(&[gutter.into()]),
-            &cells,
-            regions,
+            cells,
             styles,
-            self.span(),
         );
+        let layouter = GridLayouter::new(&grid, &stroke, regions, styles, self.span());
 
-        Ok(layouter.layout(engine)?.fragment)
+        layouter.layout(engine)
     }
 }
 

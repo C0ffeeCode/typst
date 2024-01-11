@@ -2,10 +2,11 @@ use std::borrow::Cow;
 use std::fmt::{self, Debug, Formatter};
 use std::ops::Range;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use az::SaturatingAs;
 use ecow::EcoString;
-use rustybuzz::{Tag, UnicodeBuffer};
+use rustybuzz::{ShapePlan, Tag, UnicodeBuffer};
 use unicode_script::{Script, UnicodeScript};
 
 use super::SpanMapper;
@@ -229,6 +230,7 @@ impl<'a> ShapedText<'a> {
         let lang = TextElem::lang_in(self.styles);
         let decos = TextElem::deco_in(self.styles);
         let fill = TextElem::fill_in(self.styles);
+        let stroke = TextElem::stroke_in(self.styles);
 
         for ((font, y_offset), group) in
             self.glyphs.as_ref().group_by_key(|g| (g.font.clone(), g.y_offset))
@@ -240,24 +242,24 @@ impl<'a> ShapedText<'a> {
             }
 
             let pos = Point::new(offset, top + shift - y_offset.at(self.size));
-            let glyphs = group
+            let glyphs: Vec<Glyph> = group
                 .iter()
-                .map(|glyph| {
+                .map(|shaped: &ShapedGlyph| {
                     let adjustability_left = if justification_ratio < 0.0 {
-                        glyph.shrinkability().0
+                        shaped.shrinkability().0
                     } else {
-                        glyph.stretchability().0
+                        shaped.stretchability().0
                     };
                     let adjustability_right = if justification_ratio < 0.0 {
-                        glyph.shrinkability().1
+                        shaped.shrinkability().1
                     } else {
-                        glyph.stretchability().1
+                        shaped.stretchability().1
                     };
 
                     let justification_left = adjustability_left * justification_ratio;
                     let mut justification_right =
                         adjustability_right * justification_ratio;
-                    if glyph.is_justifiable() {
+                    if shaped.is_justifiable() {
                         justification_right +=
                             Em::from_length(extra_justification, self.size)
                     }
@@ -265,15 +267,33 @@ impl<'a> ShapedText<'a> {
                     frame.size_mut().x += justification_left.at(self.size)
                         + justification_right.at(self.size);
 
+                    // |<---- a Glyph ---->|
+                    //  -->|ShapedGlyph|<--
+                    // +---+-----------+---+
+                    // |   |  *********|   |
+                    // |   |  *        |   |
+                    // |   |  *    ****|   |
+                    // |   |  *       *|   |
+                    // |   |  *********|   |
+                    // +---+--+--------+---+
+                    //   A   B     C     D
+                    // Note A, B, D could be positive, zero, or negative.
+                    // A: justification_left
+                    // B: ShapedGlyph's x_offset
+                    //    (though a small part of the glyph may go inside B)
+                    // B+C: ShapedGlyph's x_advance
+                    // D: justification_right
+                    // A+B: Glyph's x_offset
+                    // A+B+C+D: Glyph's x_advance
                     Glyph {
-                        id: glyph.glyph_id,
-                        x_advance: glyph.x_advance
+                        id: shaped.glyph_id,
+                        x_advance: shaped.x_advance
                             + justification_left
                             + justification_right,
-                        x_offset: glyph.x_offset + justification_left,
-                        range: (glyph.range.start - range.start).saturating_as()
-                            ..(glyph.range.end - range.start).saturating_as(),
-                        span: glyph.span,
+                        x_offset: shaped.x_offset + justification_left,
+                        range: (shaped.range.start - range.start).saturating_as()
+                            ..(shaped.range.end - range.start).saturating_as(),
+                        span: shaped.span,
                     }
                 })
                 .collect();
@@ -283,6 +303,7 @@ impl<'a> ShapedText<'a> {
                 size: self.size,
                 lang,
                 fill: fill.clone(),
+                stroke: stroke.clone().map(|s| s.unwrap_or_default()),
                 text: self.text[range.start - self.base..range.end - self.base].into(),
                 glyphs,
             };
@@ -672,9 +693,21 @@ fn shape_segment<'a>(
         Dir::RTL => rustybuzz::Direction::RightToLeft,
         _ => unimplemented!("vertical text layout"),
     });
+    buffer.guess_segment_properties();
+
+    // Prepare the shape plan. This plan depends on direction, script, language,
+    // and features, but is independent from the text and can thus be
+    // memoized.
+    let plan = create_shape_plan(
+        &font,
+        buffer.direction(),
+        buffer.script(),
+        buffer.language().as_ref(),
+        &ctx.features,
+    );
 
     // Shape!
-    let buffer = rustybuzz::shape(font.rusty(), &ctx.features, buffer);
+    let buffer = rustybuzz::shape_with_plan(font.rusty(), &plan, buffer);
     let infos = buffer.glyph_infos();
     let pos = buffer.glyph_positions();
     let ltr = ctx.dir.is_positive();
@@ -763,6 +796,24 @@ fn shape_segment<'a>(
     }
 
     ctx.used.pop();
+}
+
+/// Create a shape plan.
+#[comemo::memoize]
+fn create_shape_plan(
+    font: &Font,
+    direction: rustybuzz::Direction,
+    script: rustybuzz::Script,
+    language: Option<&rustybuzz::Language>,
+    features: &[rustybuzz::Feature],
+) -> Arc<ShapePlan> {
+    Arc::new(rustybuzz::ShapePlan::new(
+        font.rusty(),
+        direction,
+        Some(script),
+        language,
+        features,
+    ))
 }
 
 /// Shape the text with tofus from the given font.

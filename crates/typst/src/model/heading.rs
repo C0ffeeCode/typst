@@ -84,7 +84,7 @@ pub struct HeadingElem {
     ///
     /// Note that this property, if set to `{true}`, ensures the heading is also
     /// shown as a bookmark in the exported PDF's outline (when exporting to
-    /// PDF). To change that behavior, use the `bookmarked` property.
+    /// PDF). To change that behaviour, use the `bookmarked` property.
     ///
     /// ```example
     /// #outline()
@@ -106,7 +106,7 @@ pub struct HeadingElem {
     /// appear in the exported PDF's outline if its `outlined` property is set
     /// to `{true}`, that is, if it would also be listed in Typst's
     /// [outline]($outline). Setting this property to either `{true}` (bookmark)
-    /// or `{false}` (don't bookmark) bypasses that behavior.
+    /// or `{false}` (don't bookmark) bypasses that behaviour.
     ///
     /// ```example
     /// #heading[Normal heading]
@@ -152,17 +152,21 @@ impl Synthesize for HeadingElem {
 }
 
 impl Show for HeadingElem {
-    #[tracing::instrument(name = "HeadingElem::show", skip_all)]
+    #[typst_macros::time(name = "heading", span = self.span())]
     fn show(&self, _: &mut Engine, styles: StyleChain) -> SourceResult<Content> {
         let mut realized = self.body().clone();
         if let Some(numbering) = self.numbering(styles).as_ref() {
             realized = Counter::of(Self::elem())
-                .display(Some(numbering.clone()), false)
+                .display(self.span(), Some(numbering.clone()), false)
                 .spanned(self.span())
                 + HElem::new(Em::new(0.3).into()).with_weak(true).pack()
                 + realized;
         }
-        Ok(BlockElem::new().with_body(Some(realized)).pack())
+        Ok(BlockElem::new()
+            .spanned(self.span())
+            .spanned(self.span())
+            .with_body(Some(realized))
+            .pack())
     }
 }
 
@@ -268,6 +272,7 @@ impl LocalName for HeadingElem {
             Lang::PORTUGUESE => "Seção",
             Lang::ROMANIAN => "Secțiunea",
             Lang::RUSSIAN => "Раздел",
+            Lang::SERBIAN => "Поглавље",
             Lang::SLOVENIAN => "Poglavje",
             Lang::SPANISH => "Sección",
             Lang::SWEDISH => "Kapitel",

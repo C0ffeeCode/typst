@@ -25,7 +25,7 @@ use crate::layout::{
 };
 use crate::loading::Readable;
 use crate::model::Figurable;
-use crate::syntax::Spanned;
+use crate::syntax::{Span, Spanned};
 use crate::text::{families, Lang, LocalName, Region};
 use crate::util::{option_eq, Numeric};
 use crate::visualize::Path;
@@ -104,6 +104,8 @@ impl ImageElem {
     /// ```
     #[func(title = "Decode Image")]
     pub fn decode(
+        /// The call span of this function.
+        span: Span,
         /// The data to decode as an image. Can be a string for SVGs.
         data: Readable,
         /// The image's format. Detected automatically by default.
@@ -122,7 +124,7 @@ impl ImageElem {
         #[named]
         fit: Option<ImageFit>,
     ) -> StrResult<Content> {
-        let mut elem = ImageElem::new(EcoString::new(), data);
+        let mut elem = ImageElem::new(EcoString::new(), data).spanned(span);
         if let Some(format) = format {
             elem.push_format(format);
         }
@@ -143,7 +145,7 @@ impl ImageElem {
 }
 
 impl Layout for ImageElem {
-    #[tracing::instrument(name = "ImageElem::layout", skip_all)]
+    #[typst_macros::time(name = "image", span = self.span())]
     fn layout(
         &self,
         engine: &mut Engine,
@@ -234,6 +236,7 @@ impl Layout for ImageElem {
 
         // Create a clipping group if only part of the image should be visible.
         if fit == ImageFit::Cover && !target.fits(fitted) {
+            frame.meta(styles, false);
             frame.clip(Path::rect(frame.size()));
         }
 
@@ -268,6 +271,7 @@ impl LocalName for ImageElem {
             Lang::PORTUGUESE => "Figura",
             Lang::ROMANIAN => "Figura",
             Lang::RUSSIAN => "Рис.",
+            Lang::SERBIAN => "Слика",
             Lang::SLOVENIAN => "Slika",
             Lang::SPANISH => "Figura",
             Lang::SWEDISH => "Figur",
@@ -321,11 +325,12 @@ pub enum ImageKind {
 impl Image {
     /// Create an image from a buffer and a format.
     #[comemo::memoize]
+    #[typst_macros::time(name = "load image")]
     pub fn new(
         data: Bytes,
         format: ImageFormat,
         alt: Option<EcoString>,
-    ) -> StrResult<Self> {
+    ) -> StrResult<Image> {
         let kind = match format {
             ImageFormat::Raster(format) => {
                 ImageKind::Raster(RasterImage::new(data, format)?)
@@ -340,13 +345,14 @@ impl Image {
 
     /// Create a possibly font-dependant image from a buffer and a format.
     #[comemo::memoize]
+    #[typst_macros::time(name = "load image")]
     pub fn with_fonts(
         data: Bytes,
         format: ImageFormat,
         alt: Option<EcoString>,
         world: Tracked<dyn World + '_>,
         families: &[String],
-    ) -> StrResult<Self> {
+    ) -> StrResult<Image> {
         let kind = match format {
             ImageFormat::Raster(format) => {
                 ImageKind::Raster(RasterImage::new(data, format)?)
