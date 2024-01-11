@@ -67,6 +67,12 @@ pub struct CompileCommand {
     /// Path to output file (PDF, PNG, or SVG)
     pub output: Option<PathBuf>,
 
+    #[clap(
+        long = "stdout",
+        default_value_t = false,
+    )]
+    pub output_to_stdout: bool,
+
     /// The format of the output file, inferred from the extension by default
     #[arg(long = "format", short = 'f')]
     pub format: Option<OutputFormat>,

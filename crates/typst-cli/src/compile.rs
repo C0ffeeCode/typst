@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::{Datelike, Timelike};
@@ -166,9 +167,19 @@ fn export_pdf(
 ) -> StrResult<()> {
     let ident = world.input().to_string_lossy();
     let buffer = typst_pdf::pdf(document, Some(&ident), now());
-    let output = command.output();
-    fs::write(output, buffer)
-        .map_err(|err| eco_format!("failed to write PDF file ({err})"))?;
+
+    // If to stdout
+    if command.output_to_stdout {
+        let mut stdout = std::io::stdout().lock();
+        stdout.write_all(&buffer)
+            .map_err(|err| eco_format!("failed to write PDF to stdout ({err})"))?;
+    }
+    // If not to stdout or output file is explicitly set
+    if !command.output_to_stdout | command.output.is_some() {
+        let output = command.output();
+        fs::write(output, buffer)
+            .map_err(|err| eco_format!("failed to write PDF file ({err})"))?;
+    }
     Ok(())
 }
 
